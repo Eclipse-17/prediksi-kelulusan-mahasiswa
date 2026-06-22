@@ -36,7 +36,13 @@ st.write(
 # ======================
 # INPUT
 # ======================
+nama = st.text_input(
+    "Nama Mahasiswa"
+)
 
+nim = st.text_input(
+    "NIM"
+)
 gender = st.selectbox(
     "Jenis Kelamin",
     ["L", "P"]
