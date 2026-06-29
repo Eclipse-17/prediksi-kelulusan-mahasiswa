@@ -699,68 +699,7 @@ with page_tabs[4]:
                     hide_index=True,
                 )
 
-        # ======================
-        # UPLOAD FILE (Tab 5)
-        # ======================
-        st.divider()
-        st.subheader("Upload File (Prediksi banyak baris)")
-        st.caption("Kolom wajib: l/p, ipk, prestasi, jurnal. Kolom nama boleh.")
-
-        uploaded_tab5 = st.file_uploader(
-            "Pilih file untuk diprediksi (CSV/Excel)",
-            type=["csv", "xlsx", "xls"],
-            accept_multiple_files=False,
-            key="upload_tab5",
-        )
-
-        if uploaded_tab5 is not None:
-            try:
-                filename = uploaded_tab5.name
-                st.info(f"File terdeteksi: {filename}")
-
-                if filename.lower().endswith(".csv"):
-                    df_raw = pd.read_csv(uploaded_tab5)
-                else:
-                    df_raw = pd.read_excel(uploaded_tab5)
-
-                st.write("**Preview data yang diupload**")
-                st.dataframe(df_raw.head(50), use_container_width=True)
-
-                if st.button("Prediksi dari File (Tab 5)", type="primary", key="predict_file_tab5"):
-                    # preprocess memakai urutan kolom sesuai model history
-                    df_features = pd.DataFrame(df_raw.copy())
-
-                    df_features = _preprocess_with_columns(df_raw, active_columns)
-                    df_pred = pd.DataFrame(
-                        {
-                            "prediksi": active_clf.predict(df_features),
-                            "prob_Tepat Waktu": active_clf.predict_proba(df_features)[:, 0].astype(float),
-                            "prob_Terlambat": active_clf.predict_proba(df_features)[:, 1].astype(float),
-                        }
-                    )
-
-                    df_result = df_raw.copy()
-                    df_result["prediksi"] = df_pred["prediksi"].map({1: "Terlambat", 0: "Tepat Waktu"})
-                    df_result["prob_Tepat Waktu"] = df_pred["prob_Tepat Waktu"].round(3)
-                    df_result["prob_Terlambat"] = df_pred["prob_Terlambat"].round(3)
-
-                    st.write("## Hasil Prediksi")
-                    st.dataframe(df_result, use_container_width=True)
-
-                    csv_out = df_result.to_csv(index=False).encode("utf-8")
-                    st.download_button(
-                        "Download hasil (CSV)",
-                        data=csv_out,
-                        file_name="hasil_prediksi_tab5.csv",
-                        mime="text/csv",
-                        key="download_csv_tab5",
-                    )
-
-            except Exception as e:
-                st.error(f"Gagal memproses file: {e}")
-
         def _preprocess_with_columns(df_raw: pd.DataFrame, cols):
-
             # re-use normalize logic, tapi paksa urutan kolom sesuai model
             df = df_raw.copy()
             df["l/p"] = df["l/p"].apply(_normalize_gender)
