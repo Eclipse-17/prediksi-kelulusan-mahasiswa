@@ -33,6 +33,9 @@ st.markdown(
     Gunakan tab di atas untuk:
     - **Input Manual** (1 mahasiswa)
     - **Upload File** (banyak baris)
+    - **Data & train** (buat model dengan dataset baru)
+    - **riwayat model** (memakai model yang dibuat dengan dataset baru)
+    - **prediksi riwayat model** (prediksi input baru memakai model yang dibuat dengan dataset baru)
     """
 )
 
@@ -41,7 +44,8 @@ st.markdown(
 # ======================
 # UI: HALAMAN (TAB)
 # ======================
-page_tabs = st.tabs(["Input Manual", "Upload File", "Dataset & Train"])
+page_tabs = st.tabs(["Input Manual", "Upload File", "Dataset & Train", "Riwayat Model", "Prediksi Model Riwayat"])
+
 
 
 
@@ -295,6 +299,8 @@ Siti,P,2.80,Tidak Ada,Tidak Ada
 # DATASET & TRAIN -> Tab 3
 # ======================
 with page_tabs[2]:
+
+
     st.subheader("Dataset & Train RandomForest")
 
     # Simpan history training di session state
@@ -443,6 +449,7 @@ with page_tabs[2]:
             try:
                 import datetime
                 model_item = {
+                    "model_name": f"model[{len(st.session_state.model_history)+1}]",
                     "trained_at": datetime.datetime.now().isoformat(timespec="seconds"),
                     "dataset_name": getattr(uploaded_train, "name", "dataset"),
                     "accuracy": float(acc),
@@ -454,6 +461,17 @@ with page_tabs[2]:
                     "features": required_feat,
                 }
                 st.session_state.model_history.append(model_item)
+
+                # persist ke file agar tidak hilang saat refresh
+                import os
+                import pickle
+                HISTORY_PATH = "model_history.pkl"
+                try:
+                    with open(HISTORY_PATH, "wb") as f:
+                        pickle.dump(st.session_state.model_history, f)
+                except Exception:
+                    pass
+
             except Exception:
                 # jika gagal simpan, tetap lanjut UI training
                 pass
@@ -512,3 +530,305 @@ with page_tabs[2]:
 
         except Exception as e:
             st.error(f"Gagal memproses dataset training: {e}")
+
+
+# ======================
+# RIWAYAT MODEL -> Tab 4
+# ======================
+with page_tabs[3]:
+    st.subheader("Riwayat Model")
+    st.markdown(
+        "kalau habis menginput di tab 3(dataset&train) silahkan refresh halaman terlebih dahulu"
+    )
+
+    import os
+    import pickle
+    import pandas as pd
+
+    HISTORY_PATH = "model_history.pkl"
+
+    # ======================
+    # LOAD HISTORY
+    # ======================
+    if "model_history" not in st.session_state:
+        st.session_state.model_history = []
+
+    if (
+        len(st.session_state.model_history) == 0
+        and os.path.exists(HISTORY_PATH)
+    ):
+        try:
+            with open(HISTORY_PATH, "rb") as f:
+                st.session_state.model_history = pickle.load(f)
+        except:
+            st.session_state.model_history = []
+
+    # ======================
+    # TAMPILKAN RIWAYAT
+    # ======================
+    if len(st.session_state.model_history) > 0:
+
+        rows = []
+
+        active_name = ""
+        if "active_model_item" in st.session_state:
+            active_name = st.session_state.active_model_item.get(
+                "model_name", ""
+            )
+
+        for i, item in enumerate(st.session_state.model_history):
+
+            model_name = item.get(
+                "model_name",
+                f"Model {i+1}"
+            )
+
+            rows.append(
+                {
+                    "Model": model_name,
+                    "Tanggal": item.get(
+                        "trained_at",
+                        ""
+                    ),
+                    "Dataset": item.get(
+                        "dataset_name",
+                        ""
+                    ),
+                    "Accuracy": item.get(
+                        "accuracy",
+                        ""
+                    ),
+                    "Jumlah Data": item.get(
+                        "n_rows",
+                        ""
+                    ),
+                    "Jumlah Kolom": item.get(
+                        "n_cols",
+                        ""
+                    ),
+                    "Label": item.get(
+                        "label_col",
+                        ""
+                    ),
+                    "Pakai": model_name == active_name,
+                }
+            )
+
+        df_history = pd.DataFrame(rows)
+
+        edited_df = st.data_editor(
+            df_history,
+            hide_index=True,
+            use_container_width=True,
+            disabled=[
+                "Model",
+                "Tanggal",
+                "Dataset",
+                "Accuracy",
+                "Jumlah Data",
+                "Jumlah Kolom",
+                "Label",
+            ]
+        )
+
+        # ======================
+        # GANTI MODEL AKTIF
+        # ======================
+        selected = edited_df.index[
+            edited_df["Pakai"] == True
+        ].tolist()
+
+        if len(selected) > 0:
+
+            idx = selected[-1]
+
+            st.session_state.active_model_item = (
+                st.session_state.model_history[idx]
+            )
+
+            st.success(
+                f"Model aktif : {df_history.loc[idx,'Model']}"
+            )
+
+    else:
+        st.info(
+            "Belum ada riwayat model. Latih model di Tab 3 dulu."
+        )
+# ======================
+# PREDIKSI MODEL RIWAYAT -> Tab 5
+# ======================
+with page_tabs[4]:
+    st.subheader("Prediksi Model Riwayat")
+
+    if "active_model_item" not in st.session_state or st.session_state.active_model_item is None:
+        st.info("Pilih model terlebih dahulu di Tab 'Riwayat Model'.")
+    else:
+        active = st.session_state.active_model_item
+        active_clf = active["clf"]
+        active_columns = active["columns"]
+
+        # form input manual sama persis seperti Tab 1
+        with st.expander("Input Manual (menggunakan model riwayat)", expanded=True):
+            nama_r = st.text_input("Nama Mahasiswa (opsional)", key="nama_hist")
+            nim_r = st.text_input("NIM (opsional)", key="nim_hist")
+            gender_txt_r = st.selectbox("Jenis Kelamin", ["L", "P"], key="gender_hist")
+            ipk_r = st.number_input("IPK", min_value=0.0, max_value=4.0, value=3.0, step=0.01, key="ipk_hist")
+            prestasi_txt_r = st.selectbox("Prestasi", ["Ada", "Tidak Ada"], key="prestasi_hist")
+            jurnal_txt_r = st.selectbox("Jurnal", ["Ada", "Tidak Ada"], key="jurnal_hist")
+
+
+            st.divider()
+
+            col_a, col_b = st.columns([1, 2])
+            with col_a:
+                submit_hist = st.button("✨ Prediksi", type="primary", key="pred_hist")
+            with col_b:
+                st.write("Ringkasan input:")
+                st.dataframe(
+                    pd.DataFrame([
+                        {
+                            "nama": nama_r if nama_r else "-",
+                            "nim": nim_r if nim_r else "-",
+                            "l/p": "L" if gender_txt_r == "L" else "P",
+                            "ipk": ipk_r,
+                            "prestasi": prestasi_txt_r,
+                            "jurnal": jurnal_txt_r,
+                        }
+                    ]),
+                    width="stretch",
+                    hide_index=True,
+                )
+
+        # ======================
+        # UPLOAD FILE (Tab 5)
+        # ======================
+        st.divider()
+        st.subheader("Upload File (Prediksi banyak baris)")
+        st.caption("Kolom wajib: l/p, ipk, prestasi, jurnal. Kolom nama boleh.")
+
+        uploaded_tab5 = st.file_uploader(
+            "Pilih file untuk diprediksi (CSV/Excel)",
+            type=["csv", "xlsx", "xls"],
+            accept_multiple_files=False,
+            key="upload_tab5",
+        )
+
+        if uploaded_tab5 is not None:
+            try:
+                filename = uploaded_tab5.name
+                st.info(f"File terdeteksi: {filename}")
+
+                if filename.lower().endswith(".csv"):
+                    df_raw = pd.read_csv(uploaded_tab5)
+                else:
+                    df_raw = pd.read_excel(uploaded_tab5)
+
+                st.write("**Preview data yang diupload**")
+                st.dataframe(df_raw.head(50), use_container_width=True)
+
+                if st.button("Prediksi dari File (Tab 5)", type="primary", key="predict_file_tab5"):
+                    # preprocess memakai urutan kolom sesuai model history
+                    df_features = pd.DataFrame(df_raw.copy())
+
+                    df_features = _preprocess_with_columns(df_raw, active_columns)
+                    df_pred = pd.DataFrame(
+                        {
+                            "prediksi": active_clf.predict(df_features),
+                            "prob_Tepat Waktu": active_clf.predict_proba(df_features)[:, 0].astype(float),
+                            "prob_Terlambat": active_clf.predict_proba(df_features)[:, 1].astype(float),
+                        }
+                    )
+
+                    df_result = df_raw.copy()
+                    df_result["prediksi"] = df_pred["prediksi"].map({1: "Terlambat", 0: "Tepat Waktu"})
+                    df_result["prob_Tepat Waktu"] = df_pred["prob_Tepat Waktu"].round(3)
+                    df_result["prob_Terlambat"] = df_pred["prob_Terlambat"].round(3)
+
+                    st.write("## Hasil Prediksi")
+                    st.dataframe(df_result, use_container_width=True)
+
+                    csv_out = df_result.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        "Download hasil (CSV)",
+                        data=csv_out,
+                        file_name="hasil_prediksi_tab5.csv",
+                        mime="text/csv",
+                        key="download_csv_tab5",
+                    )
+
+            except Exception as e:
+                st.error(f"Gagal memproses file: {e}")
+
+        def _preprocess_with_columns(df_raw: pd.DataFrame, cols):
+
+            # re-use normalize logic, tapi paksa urutan kolom sesuai model
+            df = df_raw.copy()
+            df["l/p"] = df["l/p"].apply(_normalize_gender)
+            df["prestasi"] = df["prestasi"].apply(
+                lambda v: _normalize_binary(v, true_labels=["Ada", "Yes", "Ya", "Benar", "1"], false_labels=["Tidak Ada", "Tidak", "No", "0"])
+            )
+            df["jurnal"] = df["jurnal"].apply(
+                lambda v: _normalize_binary(v, true_labels=["Ada", "Yes", "Ya", "Benar", "1"], false_labels=["Tidak Ada", "Tidak", "No", "0"])
+            )
+            df["ipk"] = pd.to_numeric(df["ipk"], errors="coerce")
+
+            if df[["l/p", "ipk", "prestasi", "jurnal"]].isna().any().any():
+                bad_rows = df[df[["l/p", "ipk", "prestasi", "jurnal"]].isna().any(axis=1)].index.tolist()
+                raise ValueError(f"Ada baris yang tidak bisa diproses. Baris bermasalah: {bad_rows}")
+
+            df = df[["l/p", "ipk", "prestasi", "jurnal"]]
+            df = df[cols]
+            return df
+
+        if submit_hist:
+            try:
+                gender_val = 1 if gender_txt_r == "L" else 0
+                prestasi_val = 0 if prestasi_txt_r == "Tidak Ada" else 1
+                jurnal_val = 0 if jurnal_txt_r == "Tidak Ada" else 1
+
+                df_one_raw = pd.DataFrame([
+                    {"l/p": "L" if gender_txt_r == "L" else "P", "ipk": ipk_r, "prestasi": prestasi_txt_r, "jurnal": jurnal_txt_r}
+                ])
+
+                df_one_X = _preprocess_with_columns(df_one_raw, active_columns)
+
+                hasil = int(active_clf.predict(df_one_X)[0])
+                probabilitas = active_clf.predict_proba(df_one_X)[0]
+
+                if hasil == 1:
+                    st.error("Risiko Terlambat Lulus")
+                    label = "Terlambat"
+                else:
+                    st.success("Prediksi Tepat Waktu")
+                    label = "Tepat Waktu"
+
+                st.write("**Hasil & Probabilitas**")
+                is_terlambat = (hasil == 1)
+                badge_html = (
+                    "<div style='padding:10px 14px; border-radius:12px; font-weight:700; "
+                    f"background-color:{'#FEE2E2' if is_terlambat else '#DCFCE7'}; color:{'#991B1B' if is_terlambat else '#065F46'}; "
+                    "text-align:center; border:1px solid; border-color:inherit;'>"
+                    f"{label}"
+                    "</div>"
+                )
+                st.markdown(badge_html, unsafe_allow_html=True)
+
+                st.dataframe(
+                    pd.DataFrame([
+                        {
+                            "nama": nama_r if nama_r else "-",
+                            "nim": nim_r if nim_r else "-",
+                            "prediksi": label,
+                            "Prob_Tepat Waktu": round(float(probabilitas[0]), 3),
+                            "Prob_Terlambat": round(float(probabilitas[1]), 3),
+                        }
+                    ]),
+                    width="stretch",
+                    hide_index=True,
+                )
+
+            except Exception as e:
+                st.error(f"Gagal memprediksi model riwayat: {e}")
+
+
+
