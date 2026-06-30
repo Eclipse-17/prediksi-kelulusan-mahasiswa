@@ -30,7 +30,7 @@ st.markdown(
     """
     Aplikasi ini memprediksi apakah mahasiswa **berisiko terlambat lulus** atau **tepat waktu**.
 
-    Gunakan tab di atas untuk:
+    Gunakan tab di bawah untuk:
     - **Input Manual** (1 mahasiswa)
     - **Upload File** (banyak baris)
     - **Data & train** (buat model dengan dataset baru)
