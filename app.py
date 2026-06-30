@@ -437,7 +437,7 @@ with page_tabs[2]:
                 df_X, y, test_size=0.2, random_state=42, stratify=y
             )
 
-            clf = RandomForestClassifier(n_estimators=300, random_state=42)
+            clf = RandomForestClassifier(n_estimators=100, random_state=42)
             clf.fit(X_train, y_train)
 
             y_pred = clf.predict(X_test)
